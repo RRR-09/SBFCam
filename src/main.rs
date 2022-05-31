@@ -123,16 +123,6 @@ fn navbar_sit() {
     mouse_hide(&mut enigo);
 }
 
-// fn navbar_character_select() {
-//     const DELAY: Duration = Duration::from_millis(300);
-//     let mut enigo = Enigo::new();
-//     mouse_move(&mut enigo, 0.3, 0.77);
-//     thread::sleep(DELAY);
-//     mouse_click(&mut enigo);
-//     thread::sleep(DELAY);
-//     mouse_hide(&mut enigo);
-// }
-
 fn mouse_move(enigo: &mut Enigo, x_ratio: f32, y_ratio: f32) {
     const SCREEN_W: f32 = 1280.0;
     const SCREEN_H: f32 = 720.0;
@@ -197,39 +187,6 @@ fn send_user_chat(author: &str, msg: &str) {
     thread::sleep(type_delay);
     enigo.key_sequence(&suffixed_msg);
     thread::sleep(send_delay);
-    enigo.key_click(Key::Return);
-}
-
-fn warp(desired_location: &str) {
-    let mut enigo = Enigo::new();
-    enigo.key_click(Key::Layout('\\'));
-    thread::sleep(Duration::from_millis(400));
-    let command = format!("warp {}", desired_location.to_string());
-    enigo.key_sequence(&command);
-    enigo.key_click(Key::Return);
-}
-
-fn run_refresh() {
-    let mut enigo = Enigo::new();
-    enigo.key_click(Key::Layout('\\'));
-    thread::sleep(Duration::from_millis(400));
-    enigo.key_sequence("re");
-    enigo.key_click(Key::Return);
-}
-
-fn run_die() {
-    let mut enigo = Enigo::new();
-    enigo.key_click(Key::Layout('\\'));
-    thread::sleep(Duration::from_millis(400));
-    enigo.key_sequence("die");
-    enigo.key_click(Key::Return);
-}
-
-fn run_explode() {
-    let mut enigo = Enigo::new();
-    enigo.key_click(Key::Layout('\\'));
-    thread::sleep(Duration::from_millis(400));
-    enigo.key_sequence("explode");
     enigo.key_click(Key::Return);
 }
 
@@ -408,7 +365,7 @@ pub struct SystemInstruction {
 
 pub async fn queue_processor(
     mut channel_receiver: UnboundedReceiver<SystemInstruction>,
-    bot_config: BotConfig,
+    _bot_config: BotConfig,
 ) {
     let mut instruction_history: Vec<InstructionPair> = Vec::new();
 
@@ -554,45 +511,6 @@ pub async fn queue_processor(
             if !success {
                 eprintln!("Failed instruction processing");
             }
-        }
-    }
-}
-
-pub async fn test_loop(channel_sender: UnboundedSender<SystemInstruction>) {
-    let mut interval = tokio::time::interval(Duration::from_millis(2000));
-    loop {
-        interval.tick().await;
-        let instruction_vec: Vec<InstructionPair> = vec![
-            InstructionPair {
-                execution_order: 1,
-                instruction: Instruction::CheckActive {
-                    window_title: "SBFCam".to_string(),
-                },
-            },
-            InstructionPair {
-                execution_order: 0,
-                instruction: Instruction::ConsoleCommand {
-                    command: "warp xyz".to_string(),
-                },
-            },
-            InstructionPair {
-                execution_order: 2,
-                instruction: Instruction::CheckActive {
-                    window_title: "A window that doesnt exist so it should ping discord"
-                        .to_string(),
-                },
-            },
-        ];
-
-        let instruction_set = SystemInstruction {
-            client: None,
-            chat_message: None,
-            instructions: instruction_vec,
-        };
-
-        match channel_sender.send(instruction_set) {
-            Err(_e) => eprintln!("Channel Error"),
-            _ => (),
         }
     }
 }
@@ -845,19 +763,30 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     }
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+
+                            let move_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::MoveDirection {
+                                            direction: direction,
+                                            duration: amount,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(move_instructions) {
+                                Err(_e) => eprintln!("MoveDirection Channel Error"),
+                                _ => (),
                             }
-                            move_direction(&direction, amount);
                         }
                         "warp" => {
                             if clean_args.len() < 2 {
@@ -874,25 +803,47 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
 
                             match desired_location {
                                 Some(desired_location) => {
-                                    let success = check_active(&bot_config.game_name);
-                                    if !success {
-                                        let _ = notify_admin("Failed to find Roblox!").await;
-                                        client
-                                            .reply_to_privmsg(
-                                                String::from(
-                                                    "[Failed to find Roblox! Notified dev.]",
-                                                ),
-                                                &msg,
-                                            )
-                                            .await
-                                            .unwrap();
-                                        continue;
+                                    let warp_instructions = SystemInstruction {
+                                        client: Some(client.clone()),
+                                        chat_message: Some(msg.to_owned()),
+                                        instructions: vec![
+                                            InstructionPair {
+                                                execution_order: 0,
+                                                instruction: Instruction::CheckActive {
+                                                    window_title: bot_config.game_name.to_owned(),
+                                                },
+                                            },
+                                            InstructionPair {
+                                                execution_order: 1,
+                                                instruction: Instruction::SystemChatMessage {
+                                                    message: format!(
+                                                        "[Warping to {}!]",
+                                                        desired_location
+                                                    )
+                                                    .to_string(),
+                                                },
+                                            },
+                                            InstructionPair {
+                                                execution_order: 1,
+                                                instruction: Instruction::Leap {
+                                                    // Clear any sitting effects
+                                                    forward_amount: 1.0,
+                                                    spacebar_amount: 1.0,
+                                                },
+                                            },
+                                            InstructionPair {
+                                                execution_order: 1,
+                                                instruction: Instruction::ConsoleCommand {
+                                                    command: format!("warp {}", desired_location)
+                                                        .to_string(),
+                                                },
+                                            },
+                                        ],
+                                    };
+                                    match queue_sender.send(warp_instructions) {
+                                        Err(_e) => eprintln!("Warp Channel Error"),
+                                        _ => (),
                                     }
-                                    send_system_chat(
-                                        format!("[Warping to {}!]", desired_location).as_ref(),
-                                    );
-                                    leap(1.0, 1.0); // Clear any sitting effects
-                                    warp(desired_location);
                                 }
                                 None => {
                                     client.reply_to_privmsg(format!("[{} is not a valid location! Map: https://sbf.fumocam.xyz/warp-map (Valid locations: {})]", clean_args[1], bot_config.valid_tp_locations), &msg).await.unwrap();
@@ -913,6 +864,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f32 = 360.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f32>();
                             match num {
@@ -928,19 +880,26 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_left_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::MoveCameraX { x_ratio: amount },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_left_instructions) {
+                                Err(_e) => eprintln!("Camera Left Channel Error"),
+                                _ => (),
                             }
-                            camera_x(amount);
                         }
                         "right" => {
                             if clean_args.len() < 2 {
@@ -956,6 +915,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f32 = 360.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f32>();
                             match num {
@@ -971,19 +931,28 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_right_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::MoveCameraX {
+                                            x_ratio: amount * -1.0,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_right_instructions) {
+                                Err(_e) => eprintln!("Camera Right Channel Error"),
+                                _ => (),
                             }
-                            camera_x(amount * -1.0);
                         }
                         "up" => {
                             if clean_args.len() < 2 {
@@ -997,6 +966,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f32 = 180.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f32>();
                             match num {
@@ -1012,19 +982,26 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_up_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::MoveCameraY { y_ratio: amount },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_up_instructions) {
+                                Err(_e) => eprintln!("Camera Up Channel Error"),
+                                _ => (),
                             }
-                            camera_y(amount);
                         }
                         "down" => {
                             if clean_args.len() < 2 {
@@ -1040,6 +1017,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f32 = 180.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f32>();
                             match num {
@@ -1055,19 +1033,28 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_down_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::MoveCameraY {
+                                            y_ratio: amount * -1.0,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_down_instructions) {
+                                Err(_e) => eprintln!("Camera Down Channel Error"),
+                                _ => (),
                             }
-                            camera_y(amount * -1.0);
                         }
                         "zoomin" => {
                             if clean_args.len() < 2 {
@@ -1083,6 +1070,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f64 = 1000000.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f64>();
                             match num {
@@ -1098,19 +1086,29 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_zoom_in_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ZoomCamera {
+                                            direction: "i".to_string(),
+                                            duration: amount,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_zoom_in_instructions) {
+                                Err(_e) => eprintln!("Camera Zoom In Channel Error"),
+                                _ => (),
                             }
-                            camera_zoom("i", amount);
                         }
                         "zoomout" => {
                             if clean_args.len() < 2 {
@@ -1126,6 +1124,7 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 continue;
                             }
                             const MAX_AMOUNT: f64 = 1000000.0;
+                            #[allow(unused_assignments)]
                             let mut amount = 45.0;
                             let num = clean_args[1].parse::<f64>();
                             match num {
@@ -1141,19 +1140,29 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     continue;
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let camera_zoom_out_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ZoomCamera {
+                                            direction: "o".to_string(),
+                                            duration: amount,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(camera_zoom_out_instructions) {
+                                Err(_e) => eprintln!("Camera Zoom Out Channel Error"),
+                                _ => (),
                             }
-                            camera_zoom("o", amount);
                         }
                         "leap" => {
                             const MAX_AMOUNT: f64 = 2.0;
@@ -1191,125 +1200,184 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                     }
                                 }
                             }
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let leap_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::Leap {
+                                            forward_amount: forward_amount,
+                                            spacebar_amount: spacebar_amount,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(leap_instructions) {
+                                Err(_e) => eprintln!("Leap Channel Error"),
+                                _ => (),
                             }
-                            leap(forward_amount, spacebar_amount);
                         }
                         "hidemouse" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let hide_mouse_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![InstructionPair {
+                                    execution_order: 0,
+                                    instruction: Instruction::HideMouse {},
+                                }],
+                            };
+                            match queue_sender.send(hide_mouse_instructions) {
+                                Err(_e) => eprintln!("Hide Mouse Channel Error"),
+                                _ => (),
                             }
-                            let mut enigo = Enigo::new();
-                            mouse_hide(&mut enigo);
                         }
                         "jump" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let jump_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::Leap {
+                                            forward_amount: 0.0,
+                                            spacebar_amount: 1.0,
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(jump_instructions) {
+                                Err(_e) => eprintln!("Jump Channel Error"),
+                                _ => (),
                             }
-                            leap(0.0, 1.0);
                         }
                         "grief" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let jump_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::Grief {},
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(jump_instructions) {
+                                Err(_e) => eprintln!("Grief Channel Error"),
+                                _ => (),
                             }
-                            navbar_grief();
                         }
                         "refresh" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let refresh_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ConsoleCommand {
+                                            command: "re".to_string(),
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(refresh_instructions) {
+                                Err(_e) => eprintln!("Refresh Channel Error"),
+                                _ => (),
                             }
-                            run_refresh();
                         }
                         "die" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let die_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ConsoleCommand {
+                                            command: "die".to_string(),
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(die_instructions) {
+                                Err(_e) => eprintln!("Die Channel Error"),
+                                _ => (),
                             }
-                            run_die();
                         }
                         "explode" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let explode_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ConsoleCommand {
+                                            command: "explode".to_string(),
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(explode_instructions) {
+                                Err(_e) => eprintln!("Explode Channel Error"),
+                                _ => (),
                             }
-                            run_explode();
                         }
                         "sit" => {
-                            let success = check_active(&bot_config.game_name);
-                            if !success {
-                                let _ = notify_admin("Failed to find Roblox!").await;
-                                client
-                                    .reply_to_privmsg(
-                                        String::from("[Failed to find Roblox! Notified dev.]"),
-                                        &msg,
-                                    )
-                                    .await
-                                    .unwrap();
-                                continue;
+                            let sit_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::Sit {},
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(sit_instructions) {
+                                Err(_e) => eprintln!("Sit Channel Error"),
+                                _ => (),
                             }
-                            navbar_sit();
                         }
                         _ => (),
                     }
