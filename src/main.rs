@@ -181,18 +181,21 @@ fn send_user_chat(author: &str, msg: &str) {
     let suffixed_msg = format!("{} ", msg); // Space suffix, to avoid cutoff
     let type_delay = Duration::from_millis(400);
     let send_delay = Duration::from_millis(150);
+    let author_delay = Duration::from_millis(500);
 
     // Author
     enigo.key_click(Key::Layout('/'));
     thread::sleep(type_delay);
-    enigo.key_sequence(suffixed_author.as_ref());
+    enigo.key_sequence(&suffixed_author);
     thread::sleep(send_delay);
     enigo.key_click(Key::Return);
+
+    thread::sleep(author_delay);
 
     // Message
     enigo.key_click(Key::Layout('/'));
     thread::sleep(type_delay);
-    enigo.key_sequence(suffixed_msg.as_ref());
+    enigo.key_sequence(&suffixed_msg);
     thread::sleep(send_delay);
     enigo.key_click(Key::Return);
 }
@@ -1360,7 +1363,7 @@ pub async fn anti_afk_loop(
 ) {
     let interval_minutes = 10;
     let mut interval = tokio::time::interval(Duration::from_millis(interval_minutes * 60 * 1000));
-
+    interval.tick().await;
     loop {
         for _ in 0..3 {
             interval.tick().await;
