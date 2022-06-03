@@ -1488,7 +1488,7 @@ pub async fn anti_afk_loop(
                 },
                 InstructionPair {
                     execution_order: 1,
-                    instruction: Instruction::SystemChatMessage { message: "You can control this bot live on T witch! Go to t witch.tv and and search my username (without '_##')".to_string()},
+                    instruction: Instruction::SystemChatMessage { message: "You can control this bot live on T witch! Go to t witch.tv and and search my username (without the underscore/number)".to_string()},
                 },
             ],
         };
