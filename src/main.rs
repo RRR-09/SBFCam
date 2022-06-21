@@ -1381,6 +1381,57 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 _ => (),
                             }
                         }
+                        "size" => {
+                            if clean_args.len() < 2 {
+                                client
+                                    .reply_to_privmsg(
+                                        String::from("[Specify a size! The default is 'base'. (doll, shimmy, base, deka)]"),
+                                        &msg,
+                                    )
+                                    .await
+                                    .unwrap();
+                                continue;
+                            }
+                            let valid_sizes = vec![
+                                String::from("base"),
+                                String::from("shimmy"),
+                                String::from("doll"),
+                                String::from("deka"),
+                            ];
+                            let size = clean_args[1].to_lowercase();
+                            if !valid_sizes.contains(&size) {
+                                client
+                                    .reply_to_privmsg(
+                                        String::from("[Invalid size! Specify a size, the default is 'base'. (doll, shimmy, base, deka)]"),
+                                        &msg,
+                                    )
+                                    .await
+                                    .unwrap();
+                                continue;
+                            }
+                            let size_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ConsoleCommand {
+                                            command: format!("changefumo Momiji {}", size),
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(size_instructions) {
+                                Err(_e) => eprintln!("Size Channel Error"),
+                                _ => (),
+                            }
+                        }
                         _ => (),
                     }
                 }
