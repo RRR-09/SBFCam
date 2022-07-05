@@ -18,6 +18,10 @@ use twitch_irc::{ClientConfig, SecureTCPTransport};
 use winapi;
 use windows_win;
 
+fn capitalize_string(s: &str) -> String {
+    return s[0..1].to_uppercase() + &s[1..];
+}
+
 fn move_direction(direction: &str, duration: f64) {
     let direction_char = direction.chars().next().expect("string is empty");
     let direction_key = Key::Layout(direction_char);
@@ -1380,6 +1384,60 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                             };
                             match queue_sender.send(sit_instructions) {
                                 Err(_e) => eprintln!("Sit Channel Error"),
+                                _ => (),
+                            }
+                        }
+                        "size" => {
+                            if clean_args.len() < 2 {
+                                client
+                                    .reply_to_privmsg(
+                                        String::from("[Specify a size! The default is 'base'. (doll, shimmy, base, deka)]"),
+                                        &msg,
+                                    )
+                                    .await
+                                    .unwrap();
+                                continue;
+                            }
+                            let valid_sizes = vec![
+                                String::from("base"),
+                                String::from("shimmy"),
+                                String::from("doll"),
+                                String::from("deka"),
+                            ];
+                            let size = clean_args[1].to_lowercase();
+                            if !valid_sizes.contains(&size) {
+                                client
+                                    .reply_to_privmsg(
+                                        String::from("[Invalid size! Specify a size, the default is 'base'. (doll, shimmy, base, deka)]"),
+                                        &msg,
+                                    )
+                                    .await
+                                    .unwrap();
+                                continue;
+                            }
+                            let size_instructions = SystemInstruction {
+                                client: Some(client.clone()),
+                                chat_message: Some(msg.to_owned()),
+                                instructions: vec![
+                                    InstructionPair {
+                                        execution_order: 0,
+                                        instruction: Instruction::CheckActive {
+                                            window_title: bot_config.game_name.to_owned(),
+                                        },
+                                    },
+                                    InstructionPair {
+                                        execution_order: 1,
+                                        instruction: Instruction::ConsoleCommand {
+                                            command: format!(
+                                                "changefumo SBFCam Momiji {}",
+                                                capitalize_string(&size) // console is case sensitive
+                                            ),
+                                        },
+                                    },
+                                ],
+                            };
+                            match queue_sender.send(size_instructions) {
+                                Err(_e) => eprintln!("Size Channel Error"),
                                 _ => (),
                             }
                         }
