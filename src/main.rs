@@ -629,6 +629,8 @@ pub async fn twitch_loop(queue_sender: UnboundedSender<SystemInstruction>, bot_c
                                 author_name = "Lucki".to_string();
                             } else if author_name.to_lowercase() == "objectclock" {
                                 author_name = "Caroline".to_string();
+                            } else if author_name.to_lowercase() == "ringo_thecannedone" {
+                                author_name = "fumbo".to_string();
                             }
 
                             let author_msg = format!("{}:", author_name);
